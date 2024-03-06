@@ -1,7 +1,6 @@
 const nodemailer = require('nodemailer');
 const pug = require('pug');
 const htmlToText = require('html-to-text');
-const MailgunTransport = require('mailgun-nodemailer-transport');
 
 module.exports = class Email {
   constructor(user, url) {
@@ -13,15 +12,16 @@ module.exports = class Email {
 
   newTransport() {
     if (process.env.NODE_ENV === 'production') {
-      // Mailgun
-      return nodemailer.createTransport(
-        new MailgunTransport({
-          auth: {
-            domain: process.env.MAILGUN_DOMAIN,
-            apiKey: process.env.MAILGUN_API_KEY
-          }
-        })
-      );
+      // Brevo
+      return nodemailer.createTransport({
+        service: 'smtp-relay.brevo.com',
+        secure: false, // true for 465, false for other ports
+        port: 587,
+        auth: {
+          user: process.env.BREVO_USERNAME,
+          pass: process.env.BREVO_PASSWORD
+        }
+      });
     }
 
     return nodemailer.createTransport({
