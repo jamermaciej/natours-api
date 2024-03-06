@@ -14,9 +14,9 @@ module.exports = class Email {
     if (process.env.NODE_ENV === 'production') {
       // Brevo
       return nodemailer.createTransport({
-        service: 'smtp-relay.brevo.com',
-        secure: false, // true for 465, false for other ports
-        port: 587,
+        host: process.env.BREVO_HOST,
+        secure: false,
+        port: process.env.BREVO_PORT,
         auth: {
           user: process.env.BREVO_USERNAME,
           pass: process.env.BREVO_PASSWORD
