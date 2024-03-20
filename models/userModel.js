@@ -48,6 +48,9 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: true,
     select: false
+  },
+  token: {
+    type: String
   }
 });
 

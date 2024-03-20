@@ -11,6 +11,8 @@ const bodyParser = require('body-parser');
 const compression = require('compression');
 const cors = require('cors');
 
+const https = require('https');
+const fs = require('fs');
 const AppError = require('./utils/appError');
 const globalErrorHandler = require('./controllers/errorController');
 const tourRouter = require('./routes/tourRoutes');
@@ -28,9 +30,21 @@ app.enable('trust proxy');
 app.set('view engine', 'pug');
 app.set('views', path.join(__dirname, 'views'));
 
+const options = {
+  key: fs.readFileSync('ssl/localhost.key'),
+  cert: fs.readFileSync('ssl/localhost.crt')
+};
+
+const server = https.createServer(options, app);
+
 // 1) GLOBAL MIDDLEWARES
 // Implement CORS
-app.use(cors());
+app.use(
+  cors({
+    credentials: true,
+    origin: 'https://localhost:4202'
+  })
+);
 // Access-Control-Allow-Origin *
 // api.natours.com, front-end natours.com
 // app.use(cors({
@@ -115,4 +129,4 @@ app.all('*', (req, res, next) => {
 
 app.use(globalErrorHandler);
 
-module.exports = app;
+module.exports = server;
