@@ -79,10 +79,12 @@ exports.updateMe = catchAsync(async (req, res, next) => {
     runValidators: true
   });
 
+  updatedUser.__v = undefined;
+
   res.status(200).json({
     status: 'success',
     data: {
-      user: updatedUser
+      data: updatedUser
     }
   });
 });
