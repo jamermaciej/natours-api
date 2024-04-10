@@ -2,6 +2,7 @@ const express = require('express');
 const tourController = require('./../controllers/tourController');
 const authController = require('./../controllers/authController');
 const reviewRouter = require('./../routes/reviewRoutes');
+const userController = require('./../controllers/userController');
 
 const router = express.Router();
 
@@ -32,6 +33,9 @@ router
 // /tours-within/233/center/-40,45/unit/mi
 
 router.route('/distances/:latlng/unit/:unit').get(tourController.getDistances);
+
+router
+  .get('/my-tours', authController.protect, userController.getMe, tourController.getMyTours);
 
 router
   .route('/')

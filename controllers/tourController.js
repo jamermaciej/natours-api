@@ -1,6 +1,7 @@
 const multer = require('multer');
 const sharp = require('sharp');
 const Tour = require('./../models/tourModel');
+const Booking = require('./../models/bookingModel');
 const catchAsync = require('./../utils/catchAsync');
 const factory = require('./handlerFactory');
 const AppError = require('./../utils/appError');
@@ -218,6 +219,25 @@ exports.getDistances = catchAsync(async (req, res, next) => {
     status: 'success',
     data: {
       data: distances
+    }
+  });
+});
+
+exports.getMyTours = catchAsync(async (req, res, next) => {
+  const bookings = await Booking.find({ user: req.user.id });
+
+  const tourIDs = bookings.map(el => el.tour);
+  const tours = await Tour.find({ _id: { $in: tourIDs } });
+
+  if (!tours) {
+    return next(new AppError('No document found with that ID', 404));
+  }
+
+  res.status(200).json({
+    status: 'success',
+    results: tours.length,
+    data: {
+      data: tours
     }
   });
 });
