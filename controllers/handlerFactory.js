@@ -53,7 +53,7 @@ exports.getOne = (Model, popOptions) =>
     if (popOptions) query = query.populate(popOptions);
     const doc = await query;
 
-    doc.__v = undefined;
+    // doc.__v = undefined;
 
     if (!doc) {
       return next(new AppError('No document found with that ID', 404));
