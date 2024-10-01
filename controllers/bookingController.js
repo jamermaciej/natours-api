@@ -4,6 +4,7 @@ const User = require('../models/userModel');
 const Booking = require('../models/bookingModel');
 const catchAsync = require('../utils/catchAsync');
 const factory = require('./handlerFactory');
+const dayjs = require('dayjs');
 
 exports.getCheckoutSession = catchAsync(async (req, res, next) => {
   // 1) Get the currently booked tour
@@ -16,7 +17,7 @@ exports.getCheckoutSession = catchAsync(async (req, res, next) => {
     // Dev
     success_url: `${req.protocol}://${req.get('host')}/my-tours/?tour=${
       req.params.tourId
-    }&user=${req.user.id}&price=${tour.price}`,
+    }&user=${req.user.id}&price=${tour.price}&date=${req.params.date}`,
     // success_url: `${req.protocol}://${req.get('host')}/my-tours/?tour=${
     //   req.params.tourId
     // }&user=${req.user.id}&price=${tour.price}`,
@@ -55,10 +56,24 @@ exports.getCheckoutSession = catchAsync(async (req, res, next) => {
 
 exports.createBookingCheckout = catchAsync(async (req, res, next) => {
   // Dev - This is only REMPORARY, because it's UNSECURE: everyone can make bookings without paying
-  const { tour, user, price } = req.query;
+  const { tour, user, price, date } = req.query;
 
-  if (!tour && !user && !price) return next();
+  if (!tour && !user && !price & !date) return next();
   await Booking.create({ tour, user, price });
+  const tourDoc = await Tour.findById(tour).lean();
+
+  console.log(tourDoc.maxGroupSize)
+
+  const updatedTour = {
+    ...tourDoc,
+    startDates: tourDoc.startDates.map(d => dayjs(d.date).isSame(date) ? {
+      date: d.date,
+      participants: d.participants + 1,
+      soldOut: d.participants + 1 === tourDoc.maxGroupSize ? true : false
+    } : { ...d })
+  }
+  
+  await Tour.findByIdAndUpdate(tour, updatedTour);
 
   res.redirect('https://localhost:4202/profile/bookings');
 });
