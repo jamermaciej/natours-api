@@ -75,19 +75,46 @@ exports.getAll = (Model, popOptions) =>
 
     const features = new APIFeatures(
       Model.find(filter).populate(popOptions),
-      req.query
+      req.query,
+      Model.schema.paths,
+      Model
     )
       .filter()
+      .search()
       .sort()
       .limitFields()
       .paginate();
     // const doc = await features.query.explain();
     const doc = await features.query;
+    
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+
+    const paginationActive = req.query.page && req.query.limit;
+
+    // const queryObj = features.queryString;
+    // const excludedFields = ['page', 'sort', 'limit', 'fields'];
+    // excludedFields.forEach(el => delete queryObj[el]);
+
+    // const regex = new RegExp(features.queryString['q'], 'i');
+    // const orConditions = ['name', 'email', 'role'].map(field => ({ [field]: regex }));
+
+    const total = await features.total;
+
+    console.log(total);
+
+    const pagination = {
+      page,
+      limit,
+      total,
+      pages: Math.ceil(total / limit),
+    }
 
     // SEND RESPONSE
     res.status(200).json({
       status: 'success',
       results: doc.length,
+      pagination: paginationActive ? pagination: undefined,
       data: {
         data: doc
       }

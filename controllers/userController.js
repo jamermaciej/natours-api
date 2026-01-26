@@ -4,6 +4,9 @@ const User = require('./../models/userModel');
 const catchAsync = require('./../utils/catchAsync');
 const AppError = require('./../utils/appError');
 const factory = require('./handlerFactory');
+const crypto = require('crypto');
+const bcrypt = require('bcryptjs');
+const Email = require('./../utils/email');
 
 // const multerStorage = multer.diskStorage({
 //   destination: (req, file, cb) => {
@@ -28,6 +31,35 @@ const upload = multer({
   storage: multerStorage,
   fileFilter: multerFilter
 });
+
+const generateStrongPasswordWithRules = (length = 14) => {
+  const uppercase   = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const lowercase   = 'abcdefghijklmnopqrstuvwxyz';
+  const digits      = '0123456789';
+  const special     = '!@#$%^&*()_+-=[]{};:,.<>?/~';
+
+  const allChars = uppercase + lowercase + digits + special;
+
+  let password = '';
+
+  password += uppercase[crypto.randomBytes(1)[0] % uppercase.length];
+  password += lowercase[crypto.randomBytes(1)[0] % lowercase.length];
+  password += digits[crypto.randomBytes(1)[0]   % digits.length];
+  password += special[crypto.randomBytes(1)[0]  % special.length];
+
+  const remaining = length - 4;
+  const randomBytes = crypto.randomBytes(remaining);
+  
+  for (let i = 0; i < remaining; i++) {
+    password += allChars[randomBytes[i] % allChars.length];
+  }
+
+  password = password.split('')
+    .sort(() => crypto.randomBytes(1)[0] % 2 ? 1 : -1)
+    .join('');
+
+  return password;
+}
 
 exports.uploadUserPhoto = upload.single('photo');
 
@@ -98,15 +130,68 @@ exports.deleteMe = catchAsync(async (req, res, next) => {
   });
 });
 
-exports.createUser = (req, res) => {
-  res.status(500).json({
-    status: 'error',
-    message: 'This route is not defined! Please use /signup instead'
+// exports.createUser = (req, res) => {
+//   res.status(500).json({
+//     status: 'error',
+//     message: 'This route is not defined! Please use /signup instead'
+//   });
+// };
+
+exports.createUser = catchAsync(async (req, res, next) => {
+  // Check if user already exist
+  const existingUser = await User.findOne({ email:req.body.email });
+  if (existingUser) {
+    return next(new AppError('User already exist, use another email.', 404));
+  }
+
+  // Generate temporary password
+  // const tempPassword = crypto.randomBytes(6).toString('hex');
+  const tempPassword = generateStrongPasswordWithRules();
+
+  const newUser = await User.create({
+    name: req.body.name,
+    email: req.body.email,
+    role: req.body.role,
+    password: tempPassword,
+    passwordConfirm: tempPassword
   });
-};
+
+  const url = `${req.protocol}://${req.get('host')}/`;
+  await new Email(newUser, url, tempPassword).sendTemporaryPassword();
+
+  newUser.password = undefined;
+  newUser.__v = undefined;
+
+  res.status(201).json({
+    status: 'success',
+    message: 'User created, password has been send to email address!',
+    data: {
+      data: newUser
+    }
+  });
+});
+
+exports.checkEmail = catchAsync(async (req, res, next) => {
+  const { email, excludeId } = req.query;
+
+  if (!email) {
+    return next(new AppError('Email query parameter is missing.', 400));
+  }
+
+  const query = { email: email.toLowerCase() };
+  if (excludeId) {
+    query._id = { $ne: excludeId };
+  }
+
+  const existingUser = await User.findOne(query).select('_id');
+
+  return res.status(200).json({
+    exists: !!existingUser
+  });
+});
 
 exports.getUser = factory.getOne(User);
-exports.getAllUsers = factory.getAll(User);
+exports.getAllUsers = factory.getAll(User, { path: 'users' });
 
 // Do NOT update passwords with this!
 exports.updateUser = factory.updateOne(User);
