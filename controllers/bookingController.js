@@ -59,20 +59,28 @@ exports.createBookingCheckout = catchAsync(async (req, res, next) => {
   const { tour, user, price, date } = req.query;
 
   if (!tour && !user && !price & !date) return next();
-  await Booking.create({ tour, user, price });
+  await Booking.create({
+    tour,
+    user,
+    price,
+    startDate: date,
+    status: 'active'
+  });
   const tourDoc = await Tour.findById(tour).lean();
-
-  console.log(tourDoc.maxGroupSize)
 
   const updatedTour = {
     ...tourDoc,
-    startDates: tourDoc.startDates.map(d => dayjs(d.date).isSame(date) ? {
-      date: d.date,
-      participants: d.participants + 1,
-      soldOut: d.participants + 1 === tourDoc.maxGroupSize ? true : false
-    } : { ...d })
-  }
-  
+    startDates: tourDoc.startDates.map(d =>
+      dayjs(d.date).isSame(date)
+        ? {
+            date: d.date,
+            participants: d.participants + 1,
+            soldOut: d.participants + 1 === tourDoc.maxGroupSize ? true : false
+          }
+        : { ...d }
+    )
+  };
+
   await Tour.findByIdAndUpdate(tour, updatedTour);
 
   res.redirect('https://localhost:4202/profile/bookings');
@@ -106,23 +114,84 @@ exports.webhookCheckout = (req, res, next) => {
 };
 
 exports.getMyBooking = catchAsync(async (req, res, next) => {
-    const bookings = await Booking.find({ user: req.user.id });
-  
-    if (!bookings) {
-      return next(new AppError('No document found with that ID', 404));
-    }
+  const bookings = await Booking.find({ user: req.user.id });
 
-    res.status(200).json({
-      status: 'success',
-      results: bookings.length,
-      data: {
-        data: bookings
-      }
-    });
+  if (!bookings) {
+    return next(new AppError('No document found with that ID', 404));
+  }
+
+  res.status(200).json({
+    status: 'success',
+    results: bookings.length,
+    data: {
+      data: bookings
+    }
+  });
 });
 
 exports.createBooking = factory.createOne(Booking);
 exports.getBooking = factory.getOne(Booking);
-exports.getAllBookings = factory.getAll(Booking);
-exports.updateBooking = factory.updateOne(Booking);
+exports.getAllBookings = factory.getAll(Booking, { path: 'bookings' });
+
+exports.updateBooking = catchAsync(async (req, res, next) => {
+  const oldBooking = await Booking.findById(req.params.id);
+
+  if (!oldBooking) {
+    return next(new AppError('No document found with that ID', 404));
+  }
+
+  if (
+    req.body.startDate &&
+    req.body.startDate !== oldBooking.startDate.toISOString()
+  ) {
+    await Tour.updateOne(
+      {
+        _id: oldBooking.tour,
+        'startDates.date': new Date(oldBooking.startDate)
+      },
+      { $inc: { 'startDates.$.participants': -1 } }
+    );
+
+    await Tour.updateOne(
+      {
+        _id: oldBooking.tour,
+        'startDates.date': new Date(oldBooking.startDate)
+      },
+      { $set: { 'startDates.$.soldOut': false } }
+    );
+
+    await Tour.updateOne(
+      { _id: oldBooking.tour, 'startDates.date': new Date(req.body.startDate) },
+      { $inc: { 'startDates.$.participants': 1 } }
+    );
+
+    const tour = await Tour.findById(oldBooking.tour);
+    const newStartDate = tour.startDates.find(
+      d => d.date.toISOString() === new Date(req.body.startDate).toISOString()
+    );
+
+    if (newStartDate && newStartDate.participants >= tour.maxGroupSize) {
+      await Tour.updateOne(
+        {
+          _id: oldBooking.tour,
+          'startDates.date': new Date(req.body.startDate)
+        },
+        { $set: { 'startDates.$.soldOut': true } }
+      );
+    }
+  }
+
+  const doc = await Booking.findByIdAndUpdate(req.params.id, req.body, {
+    new: true,
+    runValidators: true
+  }).populate('tour');
+
+  res.status(200).json({
+    status: 'success',
+    data: {
+      data: doc
+    }
+  });
+});
+
 exports.deleteBooking = factory.deleteOne(Booking);

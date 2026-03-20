@@ -101,7 +101,7 @@ exports.getAll = (Model, popOptions) =>
 
     const total = await features.total;
 
-    console.log(total);
+    // console.log(total);
 
     const pagination = {
       page,
