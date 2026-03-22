@@ -11,8 +11,6 @@ const bodyParser = require('body-parser');
 const compression = require('compression');
 const cors = require('cors');
 
-const https = require('https');
-const fs = require('fs');
 const AppError = require('./utils/appError');
 const globalErrorHandler = require('./controllers/errorController');
 const tourRouter = require('./routes/tourRoutes');
@@ -30,19 +28,25 @@ app.enable('trust proxy');
 app.set('view engine', 'pug');
 app.set('views', path.join(__dirname, 'views'));
 
-const options = {
-  key: fs.readFileSync('ssl/localhost.key'),
-  cert: fs.readFileSync('ssl/localhost.crt')
-};
-
-const server = https.createServer(options, app);
+let server;
+if (process.env.NODE_ENV === 'development') {
+  const https = require('https');
+  const fs = require('fs');
+  const options = {
+    key: fs.readFileSync('ssl/localhost.key'),
+    cert: fs.readFileSync('ssl/localhost.crt')
+  };
+  server = https.createServer(options, app);
+} else {
+  server = app;
+}
 
 // 1) GLOBAL MIDDLEWARES
 // Implement CORS
 app.use(
   cors({
     credentials: true,
-    origin: 'https://localhost:4202'
+    origin: process.env.CORS_ORIGIN || 'https://localhost:4202'
   })
 );
 // Access-Control-Allow-Origin *

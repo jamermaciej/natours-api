@@ -23,6 +23,9 @@ const createSendToken = (user, statusCode, req, res) => {
     secure: req.secure || req.headers['x-forwarded-proto'] === 'https'
   });
 
+  const cookie = res.getHeader('Set-Cookie');
+  res.setHeader('Set-Cookie', `${cookie}; SameSite=None`);
+
   // Remove password from output
   user.password = undefined;
   user.__v = undefined;
@@ -72,8 +75,13 @@ exports.login = catchAsync(async (req, res, next) => {
 exports.logout = (req, res) => {
   res.cookie('jwt', 'loggedout', {
     expires: new Date(Date.now() + 10 * 1000),
-    httpOnly: true
+    httpOnly: true,
+    secure: true
   });
+
+  const cookie = res.getHeader('Set-Cookie');
+  res.setHeader('Set-Cookie', `${cookie}; SameSite=None`);
+
   res.status(200).json({ status: 'success' });
 };
 
