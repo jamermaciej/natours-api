@@ -23,8 +23,11 @@ exports.getCheckoutSession = catchAsync(async (req, res, next) => {
     // }&user=${req.user.id}&price=${tour.price}`,
     // success_url: `${req.protocol}://${req.get('host')}/my-tours?alert=booking`,
     // success_url: `${req.protocol}://localhost:4202/profile/bookings`,
-    success_url: 'https://natours-ng.netlify.app/my-tours',
-    cancel_url: `https://natours-ng.netlify.app/tour/${tour.slug}`,
+    success_url: `${process.env.CORS_ORIGIN ||
+      'https://localhost:4202'}/my-tours`,
+    cancel_url: `${process.env.CORS_ORIGIN || 'https://localhost:4202'}/tour/${
+      tour.slug
+    }`,
     customer_email: req.user.email,
     client_reference_id: JSON.stringify({
       tourId: req.params.tourId,
@@ -170,6 +173,24 @@ exports.updateBooking = catchAsync(async (req, res, next) => {
 
   if (!oldBooking) {
     return next(new AppError('No document found with that ID', 404));
+  }
+
+  if (req.body.status === 'cancelled' && oldBooking.status !== 'cancelled') {
+    await Tour.updateOne(
+      {
+        _id: oldBooking.tour,
+        'startDates.date': new Date(oldBooking.startDate)
+      },
+      { $inc: { 'startDates.$.participants': -1 } }
+    );
+
+    await Tour.updateOne(
+      {
+        _id: oldBooking.tour,
+        'startDates.date': new Date(oldBooking.startDate)
+      },
+      { $set: { 'startDates.$.soldOut': false } }
+    );
   }
 
   if (
