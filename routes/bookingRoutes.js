@@ -7,10 +7,16 @@ const router = express.Router();
 
 router.use(authController.protect);
 
-router.get('/checkout-session/:tourId/:date', bookingController.getCheckoutSession);
+router.get(
+  '/checkout-session/:tourId/:date',
+  bookingController.getCheckoutSession
+);
 
-router
-  .get('/my-bookings', userController.getMe, bookingController.getMyBooking);
+router.get(
+  '/my-bookings',
+  userController.getMe,
+  bookingController.getMyBooking
+);
 
 router.use(authController.restrictTo('admin', 'lead-guide'));
 
@@ -24,5 +30,7 @@ router
   .get(bookingController.getBooking)
   .patch(bookingController.updateBooking)
   .delete(bookingController.deleteBooking);
+
+router.post('/:id/refund', bookingController.refundPayment);
 
 module.exports = router;

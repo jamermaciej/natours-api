@@ -5,6 +5,7 @@ const Booking = require('../models/bookingModel');
 const catchAsync = require('../utils/catchAsync');
 const factory = require('./handlerFactory');
 const dayjs = require('dayjs');
+const AppError = require('./../utils/appError');
 
 exports.getCheckoutSession = catchAsync(async (req, res, next) => {
   // 1) Get the currently booked tour
@@ -107,7 +108,9 @@ const createBookingCheckout = async session => {
     price,
     startDate: date,
     status: 'active',
-    paid: true
+    paid: true,
+    stripeSessionId: session.id,
+    stripePaymentIntentId: session.payment_intent
   });
 
   const tourDoc = await Tour.findById(tourId).lean();
@@ -145,8 +148,73 @@ exports.webhookCheckout = (req, res, next) => {
   if (event.type === 'checkout.session.completed')
     createBookingCheckout(event.data.object);
 
+  if (event.type === 'charge.refunded') refundBooking(event.data.object);
+
   res.status(200).json({ received: true });
 };
+
+const refundBooking = async charge => {
+  const booking = await Booking.findOneAndUpdate(
+    { stripePaymentIntentId: charge.payment_intent },
+    { status: 'refunded', paid: false },
+    { new: true }
+  );
+
+  if (!booking || booking.status === 'refunded') return;
+
+  await Tour.updateOne(
+    { _id: booking.tour, 'startDates.date': new Date(booking.startDate) },
+    { $inc: { 'startDates.$.participants': -1 } }
+  );
+
+  await Tour.updateOne(
+    { _id: booking.tour, 'startDates.date': new Date(booking.startDate) },
+    { $set: { 'startDates.$.soldOut': false } }
+  );
+};
+
+exports.refundPayment = catchAsync(async (req, res, next) => {
+  const booking = await Booking.findById(req.params.id);
+
+  if (!booking) {
+    return next(new AppError('No document found with that ID', 404));
+  }
+
+  if (!booking.stripePaymentIntentId) {
+    return next(new AppError('No payment found for this booking', 400));
+  }
+
+  if (booking.status === 'refunded') {
+    return next(new AppError('Booking already refunded', 400));
+  }
+
+  await stripe.refunds.create({
+    payment_intent: booking.stripePaymentIntentId
+  });
+
+  const doc = await Booking.findByIdAndUpdate(
+    req.params.id,
+    { status: 'refunded', paid: false },
+    { new: true }
+  ).populate('tour');
+
+  await Tour.updateOne(
+    { _id: booking.tour, 'startDates.date': new Date(booking.startDate) },
+    { $inc: { 'startDates.$.participants': -1 } }
+  );
+
+  await Tour.updateOne(
+    { _id: booking.tour, 'startDates.date': new Date(booking.startDate) },
+    { $set: { 'startDates.$.soldOut': false } }
+  );
+
+  res.status(200).json({
+    status: 'success',
+    data: {
+      data: doc
+    }
+  });
+});
 
 exports.getMyBooking = catchAsync(async (req, res, next) => {
   const bookings = await Booking.find({ user: req.user.id });
@@ -175,7 +243,13 @@ exports.updateBooking = catchAsync(async (req, res, next) => {
     return next(new AppError('No document found with that ID', 404));
   }
 
-  if (req.body.status === 'cancelled' && oldBooking.status !== 'cancelled') {
+  if (req.body.startDate && oldBooking.status !== 'active') {
+    return next(
+      new AppError('Cannot change date of cancelled or refunded booking', 400)
+    );
+  }
+
+  if (req.body.status === 'cancelled' && oldBooking.status === 'active') {
     await Tour.updateOne(
       {
         _id: oldBooking.tour,
@@ -254,15 +328,17 @@ exports.deleteBooking = catchAsync(async (req, res, next) => {
     return next(new AppError('No document found with that ID', 404));
   }
 
-  await Tour.updateOne(
-    { _id: booking.tour, 'startDates.date': new Date(booking.startDate) },
-    { $inc: { 'startDates.$.participants': -1 } }
-  );
+  if (booking.status === 'active') {
+    await Tour.updateOne(
+      { _id: booking.tour, 'startDates.date': new Date(booking.startDate) },
+      { $inc: { 'startDates.$.participants': -1 } }
+    );
 
-  await Tour.updateOne(
-    { _id: booking.tour, 'startDates.date': new Date(booking.startDate) },
-    { $set: { 'startDates.$.soldOut': false } }
-  );
+    await Tour.updateOne(
+      { _id: booking.tour, 'startDates.date': new Date(booking.startDate) },
+      { $set: { 'startDates.$.soldOut': false } }
+    );
+  }
 
   await Booking.findByIdAndDelete(req.params.id);
 
