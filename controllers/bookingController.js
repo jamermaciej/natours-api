@@ -347,3 +347,24 @@ exports.deleteBooking = catchAsync(async (req, res, next) => {
     data: null
   });
 });
+
+exports.checkTourBookingStatus = catchAsync(async (req, res, next) => {
+  const tour = await Tour.findById(req.params.tourId);
+
+  if (!tour) {
+    return next(new AppError('No document found with that ID', 404));
+  }
+
+  const booking = await Booking.findOne({
+    tour: req.params.tourId,
+    user: req.user._id,
+    status: { $in: ['active', 'pending'] }
+  });
+
+  res.status(200).json({
+    status: 'success',
+    data: {
+      data: { status: booking ? booking.status : null }
+    }
+  });
+});

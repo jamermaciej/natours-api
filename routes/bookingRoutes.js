@@ -18,6 +18,8 @@ router.get(
   bookingController.getMyBooking
 );
 
+router.get('/tour/:tourId/status', bookingController.checkTourBookingStatus);
+
 router.use(authController.restrictTo('admin', 'lead-guide'));
 
 router
