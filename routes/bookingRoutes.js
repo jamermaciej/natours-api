@@ -34,5 +34,6 @@ router
   .delete(bookingController.deleteBooking);
 
 router.post('/:id/refund', bookingController.refundPayment);
+router.post('/:id/cancel', bookingController.cancelBooking);
 
 module.exports = router;

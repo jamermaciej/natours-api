@@ -321,35 +321,6 @@ exports.updateBooking = catchAsync(async (req, res, next) => {
     );
   }
 
-  if (req.body.status === 'cancelled' && oldBooking.status === 'active') {
-    if (!req.body.cancellation.reason) {
-      return next(new AppError('Cancellation reason is required', 400));
-    }
-
-    req.body.cancellation = {
-      cancelledAt: new Date(),
-      cancelledBy: req.user.id,
-      reason: req.body.cancellation.reason,
-      note: req.body.cancellation.note
-    };
-
-    await Tour.updateOne(
-      {
-        _id: oldBooking.tour,
-        'startDates.date': new Date(oldBooking.startDate)
-      },
-      { $inc: { 'startDates.$.participants': -1 } }
-    );
-
-    await Tour.updateOne(
-      {
-        _id: oldBooking.tour,
-        'startDates.date': new Date(oldBooking.startDate)
-      },
-      { $set: { 'startDates.$.soldOut': false } }
-    );
-  }
-
   if (
     req.body.startDate &&
     req.body.startDate !== oldBooking.startDate.toISOString()
@@ -394,9 +365,65 @@ exports.updateBooking = catchAsync(async (req, res, next) => {
   const doc = await Booking.findByIdAndUpdate(req.params.id, req.body, {
     new: true,
     runValidators: true
-  })
+  }).populate('tour');
+
+  res.status(200).json({
+    status: 'success',
+    data: {
+      data: doc
+    }
+  });
+});
+
+exports.cancelBooking = catchAsync(async (req, res, next) => {
+  const booking = await Booking.findById(req.params.id);
+
+  if (!Booking) {
+    return next(new AppError('No document found with that ID', 404));
+  }
+
+  if (booking.status !== 'active') {
+    return next(new AppError('Cancellation reason is required', 400));
+  }
+
+  if (!req.body.reason) {
+    return next(new AppError('Cancellation reason is required', 400));
+  }
+
+  const doc = await Booking.findByIdAndUpdate(
+    req.params.id,
+    {
+      status: 'cancelled',
+      cancellation: {
+        cancelledAt: new Date(),
+        cancelledBy: req.user.id,
+        reason: req.body.reason,
+        note: req.body.note
+      }
+    },
+    {
+      new: true,
+      runValidators: true
+    }
+  )
     .populate('tour')
     .populate('cancellation.cancelledBy', 'name email');
+
+  await Tour.updateOne(
+    {
+      _id: booking.tour,
+      'startDates.date': new Date(booking.startDate)
+    },
+    { $inc: { 'startDates.$.participants': -1 } }
+  );
+
+  await Tour.updateOne(
+    {
+      _id: booking.tour,
+      'startDates.date': new Date(booking.startDate)
+    },
+    { $set: { 'startDates.$.soldOut': false } }
+  );
 
   res.status(200).json({
     status: 'success',
