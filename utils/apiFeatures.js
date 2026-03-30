@@ -2,7 +2,7 @@ class APIFeatures {
   constructor(query, queryString, paths, Model) {
     this.query = query;
     this.queryString = queryString;
-    this.paths = paths
+    this.paths = paths;
     this.model = Model;
   }
 
@@ -18,7 +18,7 @@ class APIFeatures {
     this.query = this.query.find(JSON.parse(queryStr));
 
     this.total = this.model.countDocuments({
-      ...queryObj,
+      ...queryObj
     });
 
     return this;
@@ -31,11 +31,17 @@ class APIFeatures {
 
     const regex = new RegExp(term, 'i');
 
-    let fieldsToSearch = Object.keys(this.paths)
-      .filter(key => this.paths[key].instance === 'String');
+    let fieldsToSearch = Object.keys(this.paths).filter(
+      key => this.paths[key].instance === 'String'
+    );
 
-
-    const excludedFields = ['photo', 'password', 'passwordConfirm', 'passwordResetToken', 'token'];
+    const excludedFields = [
+      'photo',
+      'password',
+      'passwordConfirm',
+      'passwordResetToken',
+      'token'
+    ];
     fieldsToSearch = fieldsToSearch.filter(el => !excludedFields.includes(el));
 
     const orConditions = fieldsToSearch.map(field => ({ [field]: regex }));

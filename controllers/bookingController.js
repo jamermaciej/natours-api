@@ -150,17 +150,37 @@ exports.webhookCheckout = (req, res, next) => {
 
   if (event.type === 'charge.refunded') refundBooking(event.data.object);
 
+  if (event.type === 'charge.refund.updated') cancelRefund(event.data.object);
+
   res.status(200).json({ received: true });
 };
 
 const refundBooking = async charge => {
-  const booking = await Booking.findOneAndUpdate(
-    { stripePaymentIntentId: charge.payment_intent },
-    { status: 'refunded', paid: false },
-    { new: true }
-  );
+  const booking = await Booking.findOne({
+    stripePaymentIntentId: charge.payment_intent
+  });
 
   if (!booking || booking.status === 'refunded') return;
+
+  const refundData = await stripe.refunds.list({
+    payment_intent: charge.payment_intent,
+    limit: 1
+  });
+  const latestRefund = refundData.data[0];
+
+  await Booking.findOneAndUpdate(
+    { _id: booking._id },
+    {
+      status: 'refunded',
+      paid: false,
+      refund: {
+        refundedAt: new Date(),
+        amount: charge.amount_refunded / 100,
+        reason: latestRefund ? latestRefund.reason : null
+      }
+    },
+    { new: true }
+  );
 
   await Tour.updateOne(
     { _id: booking.tour, 'startDates.date': new Date(booking.startDate) },
@@ -171,6 +191,38 @@ const refundBooking = async charge => {
     { _id: booking.tour, 'startDates.date': new Date(booking.startDate) },
     { $set: { 'startDates.$.soldOut': false } }
   );
+};
+
+const cancelRefund = async refund => {
+  if (refund.status !== 'canceled') return;
+
+  const booking = await Booking.findOneAndUpdate(
+    { stripePaymentIntentId: refund.payment_intent },
+    {
+      status: 'active',
+      paid: true,
+      refund: null
+    },
+    { new: true }
+  );
+
+  if (!booking) return;
+
+  await Tour.updateOne(
+    { _id: booking.tour, 'startDates.date': new Date(booking.startDate) },
+    { $inc: { 'startDates.$.participants': 1 } }
+  );
+
+  const tour = await Tour.findById(booking.tour);
+  const startDate = tour.startDates.find(
+    d => d.date.toISOString() === new Date(booking.startDate).toISOString()
+  );
+  if (startDate && startDate.participants >= tour.maxGroupSize) {
+    await Tour.updateOne(
+      { _id: booking.tour, 'startDates.date': new Date(booking.startDate) },
+      { $set: { 'startDates.$.soldOut': true } }
+    );
+  }
 };
 
 exports.refundPayment = catchAsync(async (req, res, next) => {
@@ -188,15 +240,35 @@ exports.refundPayment = catchAsync(async (req, res, next) => {
     return next(new AppError('Booking already refunded', 400));
   }
 
+  const refundAmount = req.body.amount || booking.price;
+
   await stripe.refunds.create({
-    payment_intent: booking.stripePaymentIntentId
+    payment_intent: booking.stripePaymentIntentId,
+    amount: Math.round(refundAmount * 100),
+    reason: req.body.reason,
+    metadata: {
+      note: req.body.note
+      // agent: 'req.user.email'
+    }
   });
 
   const doc = await Booking.findByIdAndUpdate(
     req.params.id,
-    { status: 'refunded', paid: false },
+    {
+      status: 'refunded',
+      paid: false,
+      refund: {
+        refundedAt: new Date(),
+        refundedBy: req.user.id,
+        amount: refundAmount,
+        reason: req.body.reason,
+        note: req.body.note
+      }
+    },
     { new: true }
-  ).populate('tour');
+  )
+    .populate('tour')
+    .populate('refund.refundedBy', 'name email');
 
   await Tour.updateOne(
     { _id: booking.tour, 'startDates.date': new Date(booking.startDate) },
@@ -250,6 +322,12 @@ exports.updateBooking = catchAsync(async (req, res, next) => {
   }
 
   if (req.body.status === 'cancelled' && oldBooking.status === 'active') {
+    req.body.cancellation = {
+      cancelledAt: new Date(),
+      cancelledBy: req.user.id,
+      reason: req.body.reason
+    };
+
     await Tour.updateOne(
       {
         _id: oldBooking.tour,
@@ -311,7 +389,9 @@ exports.updateBooking = catchAsync(async (req, res, next) => {
   const doc = await Booking.findByIdAndUpdate(req.params.id, req.body, {
     new: true,
     runValidators: true
-  }).populate('tour');
+  })
+    .populate('tour')
+    .populate('cancellation.cancelledBy', 'name email');
 
   res.status(200).json({
     status: 'success',

@@ -86,7 +86,7 @@ exports.getAll = (Model, popOptions) =>
       .paginate();
     // const doc = await features.query.explain();
     const doc = await features.query;
-    
+
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
 
@@ -107,14 +107,14 @@ exports.getAll = (Model, popOptions) =>
       page,
       limit,
       total,
-      pages: Math.ceil(total / limit),
-    }
+      pages: Math.ceil(total / limit)
+    };
 
     // SEND RESPONSE
     res.status(200).json({
       status: 'success',
       results: doc.length,
-      pagination: paginationActive ? pagination: undefined,
+      pagination: paginationActive ? pagination : undefined,
       data: {
         data: doc
       }

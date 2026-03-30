@@ -18,7 +18,7 @@ const bookingSchema = new mongoose.Schema({
   },
   createdAt: {
     type: Date,
-    default: Date.now()
+    default: Date.now
   },
   paid: {
     type: Boolean,
@@ -43,14 +43,41 @@ const bookingSchema = new mongoose.Schema({
   },
   stripeSessionId: {
     type: String
+  },
+  cancellation: {
+    cancelledAt: Date,
+    cancelledBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    reason: String
+  },
+  refund: {
+    refundedAt: Date,
+    refundedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    amount: Number,
+    reason: String,
+    note: String
   }
 });
 
 bookingSchema.pre(/^find/, function(next) {
-  this.populate('user').populate({
-    path: 'tour',
-    select: 'name slug startDates maxGroupSize'
-  });
+  this.populate('user')
+    .populate({
+      path: 'tour',
+      select: 'name slug startDates maxGroupSize'
+    })
+    .populate({
+      path: 'cancellation.cancelledBy',
+      select: 'name email'
+    })
+    .populate({
+      path: 'refund.refundedBy',
+      select: 'name email'
+    });
   next();
 });
 
