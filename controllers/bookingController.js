@@ -322,10 +322,15 @@ exports.updateBooking = catchAsync(async (req, res, next) => {
   }
 
   if (req.body.status === 'cancelled' && oldBooking.status === 'active') {
+    if (!req.body.cancellation.reason) {
+      return next(new AppError('Cancellation reason is required', 400));
+    }
+
     req.body.cancellation = {
       cancelledAt: new Date(),
       cancelledBy: req.user.id,
-      reason: req.body.reason
+      reason: req.body.cancellation.reason,
+      note: req.body.cancellation.note
     };
 
     await Tour.updateOne(

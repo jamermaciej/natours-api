@@ -50,7 +50,8 @@ const bookingSchema = new mongoose.Schema({
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User'
     },
-    reason: String
+    reason: String,
+    note: String
   },
   refund: {
     refundedAt: Date,
