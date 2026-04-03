@@ -326,6 +326,16 @@ exports.updateBooking = catchAsync(async (req, res, next) => {
   }
 
   if (
+    req.body.paid !== undefined &&
+    req.body.paid !== oldBooking.paid &&
+    oldBooking.status === 'refunded'
+  ) {
+    return next(
+      new AppError('Cannot change payment status of refunded booking', 400)
+    );
+  }
+
+  if (
     req.body.startDate &&
     req.body.startDate !== oldBooking.startDate.toISOString()
   ) {
