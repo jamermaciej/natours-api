@@ -247,8 +247,8 @@ exports.refundPayment = catchAsync(async (req, res, next) => {
     amount: Math.round(refundAmount * 100),
     reason: req.body.reason,
     metadata: {
-      note: req.body.note
-      // agent: 'req.user.email'
+      note: req.body.note,
+      agent: req.user.email
     }
   });
 

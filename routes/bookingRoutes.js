@@ -20,6 +20,8 @@ router.get(
 
 router.get('/tour/:tourId/status', bookingController.checkTourBookingStatus);
 
+router.get('/:id', bookingController.getBooking);
+
 router.use(authController.restrictTo('admin', 'lead-guide'));
 
 router
@@ -29,7 +31,6 @@ router
 
 router
   .route('/:id')
-  .get(bookingController.getBooking)
   .patch(bookingController.updateBooking)
   .delete(bookingController.deleteBooking);
 
