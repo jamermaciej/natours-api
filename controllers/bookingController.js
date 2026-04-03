@@ -293,7 +293,9 @@ exports.refundPayment = catchAsync(async (req, res, next) => {
 });
 
 exports.getMyBooking = catchAsync(async (req, res, next) => {
-  const bookings = await Booking.find({ user: req.user.id });
+  const bookings = await Booking.find({ user: req.user.id }).sort({
+    createdAt: -1
+  });
 
   if (!bookings) {
     return next(new AppError('No document found with that ID', 404));
