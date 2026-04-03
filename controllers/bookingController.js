@@ -182,15 +182,17 @@ const refundBooking = async charge => {
     { new: true }
   );
 
-  await Tour.updateOne(
-    { _id: booking.tour, 'startDates.date': new Date(booking.startDate) },
-    { $inc: { 'startDates.$.participants': -1 } }
-  );
+  if (booking.status === 'active') {
+    await Tour.updateOne(
+      { _id: booking.tour, 'startDates.date': new Date(booking.startDate) },
+      { $inc: { 'startDates.$.participants': -1 } }
+    );
 
-  await Tour.updateOne(
-    { _id: booking.tour, 'startDates.date': new Date(booking.startDate) },
-    { $set: { 'startDates.$.soldOut': false } }
-  );
+    await Tour.updateOne(
+      { _id: booking.tour, 'startDates.date': new Date(booking.startDate) },
+      { $set: { 'startDates.$.soldOut': false } }
+    );
+  }
 };
 
 const cancelRefund = async refund => {
@@ -270,15 +272,17 @@ exports.refundPayment = catchAsync(async (req, res, next) => {
     .populate('tour')
     .populate('refund.refundedBy', 'name email');
 
-  await Tour.updateOne(
-    { _id: booking.tour, 'startDates.date': new Date(booking.startDate) },
-    { $inc: { 'startDates.$.participants': -1 } }
-  );
+  if (booking.status === 'active') {
+    await Tour.updateOne(
+      { _id: booking.tour, 'startDates.date': new Date(booking.startDate) },
+      { $inc: { 'startDates.$.participants': -1 } }
+    );
 
-  await Tour.updateOne(
-    { _id: booking.tour, 'startDates.date': new Date(booking.startDate) },
-    { $set: { 'startDates.$.soldOut': false } }
-  );
+    await Tour.updateOne(
+      { _id: booking.tour, 'startDates.date': new Date(booking.startDate) },
+      { $set: { 'startDates.$.soldOut': false } }
+    );
+  }
 
   res.status(200).json({
     status: 'success',
