@@ -21,6 +21,7 @@ router.get(
 router.get('/tour/:tourId/status', bookingController.checkTourBookingStatus);
 
 router.get('/:id', bookingController.getBooking);
+router.post('/:id/cancel', bookingController.cancelBooking);
 
 router.use(authController.restrictTo('admin', 'lead-guide'));
 
@@ -35,6 +36,5 @@ router
   .delete(bookingController.deleteBooking);
 
 router.post('/:id/refund', bookingController.refundPayment);
-router.post('/:id/cancel', bookingController.cancelBooking);
 
 module.exports = router;
