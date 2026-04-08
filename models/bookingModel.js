@@ -69,15 +69,15 @@ bookingSchema.pre(/^find/, function(next) {
   this.populate('user')
     .populate({
       path: 'tour',
-      select: 'name slug startDates maxGroupSize'
+      select: 'name slug startDates maxGroupSize description'
     })
     .populate({
       path: 'cancellation.cancelledBy',
-      select: 'name email'
+      select: 'name email role'
     })
     .populate({
       path: 'refund.refundedBy',
-      select: 'name email'
+      select: 'name email role'
     });
   next();
 });

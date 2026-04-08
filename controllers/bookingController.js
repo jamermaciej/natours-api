@@ -394,12 +394,34 @@ exports.updateBooking = catchAsync(async (req, res, next) => {
 exports.cancelBooking = catchAsync(async (req, res, next) => {
   const booking = await Booking.findById(req.params.id);
 
-  if (!Booking) {
+  if (!booking) {
     return next(new AppError('No document found with that ID', 404));
   }
 
   if (booking.status !== 'active') {
-    return next(new AppError('Cancellation reason is required', 400));
+    return next(new AppError('Only active bookings can be cancelled', 400));
+  }
+
+  if (
+    req.user.role !== 'admin' &&
+    req.user._id.toString() !== booking.user._id.toString()
+  ) {
+    return next(
+      new AppError('You do not have permission to cancel this booking', 403)
+    );
+  }
+
+  const tourStartDate = new Date(booking.startDate);
+  const now = new Date();
+  const daysUntilStart = (tourStartDate - now) / (1000 * 60 * 60 * 24);
+
+  if (req.user.role !== 'admin' && daysUntilStart < 7) {
+    return next(
+      new AppError(
+        'Bookings can only be cancelled at least 7 days before the tour start date',
+        400
+      )
+    );
   }
 
   if (!req.body.reason) {
