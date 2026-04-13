@@ -18,7 +18,7 @@ router.get(
   bookingController.getMyBooking
 );
 
-router.get('/tour/:tourId/status', bookingController.checkTourBookingStatus);
+router.get('/tour/:tourId/status', bookingController.getTourBookingInfo);
 
 router.get('/:id', bookingController.getBooking);
 router.post('/:id/cancel', bookingController.cancelBooking);

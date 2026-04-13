@@ -13,10 +13,18 @@ exports.setTourUserIds = (req, res, next) => {
 };
 
 exports.checkIsUserBooking = catchAsync(async (req, res, next) => {
-  const bookings = await Booking.find({ user: req.body.user, tour: req.body.tour });
+  const bookings = await Booking.find({
+    user: req.body.user,
+    tour: req.body.tour
+  });
 
   if (!bookings.length) {
-    return next(new AppError('You did not booked this tour, so you can not add review to this.', 403));
+    return next(
+      new AppError(
+        'You did not booked this tour, so you can not add review to this.',
+        403
+      )
+    );
   }
 
   next();
@@ -42,15 +50,33 @@ exports.getAllReviews = factory.getAll(Review, { path: 'reviews' });
 exports.getReview = factory.getOne(Review);
 // exports.createReview = factory.createOne(Review);
 exports.createReview = catchAsync(async (req, res, next) => {
+  const existingReview = await Review.findOne({
+    user: req.body.user,
+    tour: req.body.tour
+  });
+
+  if (existingReview) {
+    return next(new AppError('You have already reviewed this tour', 400));
+  }
+
+  const booking = await Booking.findOne({
+    user: req.body.user,
+    tour: req.body.tour,
+    status: 'active',
+    startDate: { $lt: new Date() }
+  });
+
+  if (!booking) {
+    return next(
+      new AppError('You can only review a tour you have completed', 400)
+    );
+  }
+
   let doc = await Review.create(req.body);
 
-  doc = await doc.populate({
-    path: 'user',
-    select: 'name photo'
-  }).populate({
-    path: 'tour',
-    select: 'name slug'
-  }).execPopulate();
+  doc = await Review.findById(doc._id)
+    .populate({ path: 'user', select: 'name photo' })
+    .populate({ path: 'tour', select: 'name slug' });
 
   res.status(201).json({
     status: 'success',
