@@ -161,7 +161,7 @@ const refundBooking = async charge => {
     stripePaymentIntentId: charge.payment_intent
   });
 
-  if (!booking || booking.status === 'refunded') return;
+  if (!booking) return;
 
   const refundData = await stripe.refunds.list({
     payment_intent: charge.payment_intent,
@@ -169,21 +169,46 @@ const refundBooking = async charge => {
   });
   const latestRefund = refundData.data[0];
 
-  await Booking.findOneAndUpdate(
+  const alreadyRefunded = booking.refunds.some(
+    r => r.stripeRefundId === latestRefund.id
+  );
+  if (alreadyRefunded) return;
+
+  // const totalRefunded = booking.refunds.reduce((sum, r) => sum + r.amount, 0) + latestRefund.amount / 100;
+  // const isPartialRefund = charge.amount_refunded / 100 < booking.price;
+  const isFullRefund = charge.amount_refunded === charge.amount;
+  const newStatus =
+    booking.status === 'cancelled'
+      ? isFullRefund
+        ? 'refunded'
+        : 'cancelled'
+      : isFullRefund
+      ? 'refunded'
+      : 'partial_refund';
+
+  const updatedBooking = await Booking.findOneAndUpdate(
     { _id: booking._id },
     {
-      status: 'refunded',
-      paid: false,
-      refund: {
-        refundedAt: new Date(),
-        amount: charge.amount_refunded / 100,
-        reason: latestRefund ? latestRefund.reason : null
+      status: newStatus,
+      paid: !isFullRefund,
+      $push: {
+        refunds: {
+          $each: [
+            {
+              stripeRefundId: latestRefund.id,
+              refundedAt: new Date(),
+              amount: latestRefund.amount / 100,
+              reason: latestRefund ? latestRefund.reason : null
+            }
+          ],
+          $sort: { refundedAt: -1 }
+        }
       }
     },
     { new: true }
   );
 
-  if (booking.status === 'active') {
+  if (isFullRefund && booking.status !== 'cancelled') {
     await Tour.updateOne(
       { _id: booking.tour, 'startDates.date': new Date(booking.startDate) },
       { $inc: { 'startDates.$.participants': -1 } }
@@ -202,29 +227,50 @@ const cancelRefund = async refund => {
   const booking = await Booking.findOneAndUpdate(
     { stripePaymentIntentId: refund.payment_intent },
     {
-      status: 'active',
-      paid: true,
-      refund: null
+      $pull: { refunds: { stripeRefundId: refund.id } }
     },
     { new: true }
   );
 
   if (!booking) return;
 
-  await Tour.updateOne(
-    { _id: booking.tour, 'startDates.date': new Date(booking.startDate) },
-    { $inc: { 'startDates.$.participants': 1 } }
+  const totalRefunded = booking.refunds.reduce((sum, r) => sum + r.amount, 0);
+  const isPartialRefund = totalRefunded > 0 && totalRefunded < booking.price;
+  const isFullyRefunded = totalRefunded >= booking.price;
+
+  const updatedBooking = await Booking.findByIdAndUpdate(
+    booking._id,
+    {
+      status: isFullyRefunded
+        ? 'refunded'
+        : isPartialRefund
+        ? 'partial_refund'
+        : 'active',
+      paid: totalRefunded === 0 ? true : isPartialRefund
+    },
+    { new: true }
   );
 
-  const tour = await Tour.findById(booking.tour);
-  const startDate = tour.startDates.find(
-    d => d.date.toISOString() === new Date(booking.startDate).toISOString()
-  );
-  if (startDate && startDate.participants >= tour.maxGroupSize) {
+  if (
+    booking.status === 'refunded' &&
+    (updatedBooking.status === 'active' ||
+      updatedBooking.status === 'partial_refund')
+  ) {
     await Tour.updateOne(
       { _id: booking.tour, 'startDates.date': new Date(booking.startDate) },
-      { $set: { 'startDates.$.soldOut': true } }
+      { $inc: { 'startDates.$.participants': 1 } }
     );
+
+    const tour = await Tour.findById(booking.tour);
+    const startDate = tour.startDates.find(
+      d => d.date.toISOString() === new Date(booking.startDate).toISOString()
+    );
+    if (startDate && startDate.participants >= tour.maxGroupSize) {
+      await Tour.updateOne(
+        { _id: booking.tour, 'startDates.date': new Date(booking.startDate) },
+        { $set: { 'startDates.$.soldOut': true } }
+      );
+    }
   }
 };
 
@@ -243,11 +289,9 @@ exports.refundPayment = catchAsync(async (req, res, next) => {
     return next(new AppError('Booking already refunded', 400));
   }
 
-  const refundAmount = req.body.amount || booking.price;
-
-  await stripe.refunds.create({
+  const stripeRefund = await stripe.refunds.create({
     payment_intent: booking.stripePaymentIntentId,
-    amount: Math.round(refundAmount * 100),
+    amount: Math.round(req.body.amount * 100),
     reason: req.body.reason,
     metadata: {
       note: req.body.note,
@@ -255,25 +299,46 @@ exports.refundPayment = catchAsync(async (req, res, next) => {
     }
   });
 
+  const totalRefunded =
+    booking.refunds.reduce((sum, r) => sum + r.amount, 0) + req.body.amount;
+
+  const isPartialRefund = totalRefunded < booking.price;
+  const newStatus =
+    booking.status === 'cancelled'
+      ? isPartialRefund
+        ? 'cancelled'
+        : 'refunded'
+      : isPartialRefund
+      ? 'partial_refund'
+      : 'refunded';
+
   const doc = await Booking.findByIdAndUpdate(
     req.params.id,
     {
-      status: 'refunded',
-      paid: false,
-      refund: {
-        refundedAt: new Date(),
-        refundedBy: req.user.id,
-        amount: refundAmount,
-        reason: req.body.reason,
-        note: req.body.note
+      status: newStatus,
+      paid: isPartialRefund,
+      $push: {
+        refunds: {
+          $each: [
+            {
+              stripeRefundId: stripeRefund.id,
+              refundedAt: new Date(),
+              refundedBy: req.user.id,
+              amount: req.body.amount,
+              reason: req.body.reason,
+              note: req.body.note
+            }
+          ],
+          $sort: { refundedAt: -1 }
+        }
       }
     },
     { new: true }
   )
     .populate('tour')
-    .populate('refund.refundedBy', 'name email');
+    .populate('refunds.refundedBy', 'name email');
 
-  if (booking.status === 'active') {
+  if (!isPartialRefund && booking.status !== 'cancelled') {
     await Tour.updateOne(
       { _id: booking.tour, 'startDates.date': new Date(booking.startDate) },
       { $inc: { 'startDates.$.participants': -1 } }
@@ -322,19 +387,27 @@ exports.updateBooking = catchAsync(async (req, res, next) => {
     return next(new AppError('No document found with that ID', 404));
   }
 
-  if (req.body.startDate && oldBooking.status !== 'active') {
+  if (
+    req.body.startDate &&
+    oldBooking.status !== 'active' &&
+    oldBooking.status !== 'partial_refund'
+  ) {
     return next(
       new AppError('Cannot change date of cancelled or refunded booking', 400)
     );
   }
 
   if (
-    req.body.paid !== undefined &&
-    req.body.paid !== oldBooking.paid &&
-    oldBooking.status === 'refunded'
+    (req.body.paid !== undefined &&
+      req.body.paid !== oldBooking.paid &&
+      oldBooking.status === 'refunded') ||
+    oldBooking.status === 'partial_refund'
   ) {
     return next(
-      new AppError('Cannot change payment status of refunded booking', 400)
+      new AppError(
+        'Cannot change payment status of refunded or partial refund booking',
+        400
+      )
     );
   }
 
@@ -399,8 +472,13 @@ exports.cancelBooking = catchAsync(async (req, res, next) => {
     return next(new AppError('No document found with that ID', 404));
   }
 
-  if (booking.status !== 'active') {
-    return next(new AppError('Only active bookings can be cancelled', 400));
+  if (booking.status !== 'active' && booking.status !== 'partial_refund') {
+    return next(
+      new AppError(
+        'Only active and partial refund bookings can be cancelled',
+        400
+      )
+    );
   }
 
   if (
@@ -473,13 +551,13 @@ exports.cancelBooking = catchAsync(async (req, res, next) => {
 });
 
 exports.deleteBooking = catchAsync(async (req, res, next) => {
-  const booking = await Booking.findByIdAndDelete(req.params.id);
+  const booking = await Booking.findById(req.params.id);
 
   if (!booking) {
     return next(new AppError('No document found with that ID', 404));
   }
 
-  if (booking.status === 'active') {
+  if (booking.status === 'active' || booking.status === 'partial_refund') {
     await Tour.updateOne(
       { _id: booking.tour, 'startDates.date': new Date(booking.startDate) },
       { $inc: { 'startDates.$.participants': -1 } }
@@ -510,7 +588,7 @@ exports.getTourBookingInfo = catchAsync(async (req, res, next) => {
     Booking.findOne({
       user: req.user.id,
       tour: req.params.tourId,
-      status: 'active'
+      status: { $in: ['active', 'partial_refund'] }
     }).select('startDate'),
     Review.findOne({ user: req.user.id, tour: req.params.tourId })
   ]);

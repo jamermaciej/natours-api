@@ -35,7 +35,7 @@ const bookingSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['pending', 'active', 'cancelled', 'refunded'],
+    enum: ['pending', 'active', 'cancelled', 'refunded', 'partial_refund'],
     default: 'pending'
   },
   stripePaymentIntentId: {
@@ -53,16 +53,19 @@ const bookingSchema = new mongoose.Schema({
     reason: String,
     note: String
   },
-  refund: {
-    refundedAt: Date,
-    refundedBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User'
-    },
-    amount: Number,
-    reason: String,
-    note: String
-  }
+  refunds: [
+    {
+      stripeRefundId: String,
+      refundedAt: Date,
+      refundedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+      },
+      amount: Number,
+      reason: String,
+      note: String
+    }
+  ]
 });
 
 bookingSchema.pre(/^find/, function(next) {
@@ -76,7 +79,7 @@ bookingSchema.pre(/^find/, function(next) {
       select: 'name email role'
     })
     .populate({
-      path: 'refund.refundedBy',
+      path: 'refunds.refundedBy',
       select: 'name email role'
     });
   next();
