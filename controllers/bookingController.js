@@ -378,8 +378,28 @@ exports.getMyBooking = catchAsync(async (req, res, next) => {
 
 exports.createBooking = factory.createOne(Booking);
 exports.getBooking = factory.getOne(Booking);
-exports.getAllBookings = factory.getAll(Booking, { path: 'bookings' });
+//exports.getAllBookings = factory.getAll(Booking, { path: 'bookings' });
+exports.getAllBookings = catchAsync(async (req, res, next) => {
+  const bookings = await Booking.find()
+    .setOptions({ skipPopulate: true })
+    .lean()
+    .select('reservationNumber createdAt paid status price')
+    .populate({
+      path: 'user',
+      select: 'name'
+    })
+    .populate({
+      path: 'tour',
+      select: 'name',
+      options: { skipPopulate: true }
+    });
 
+  res.status(200).json({
+    status: 'success',
+    results: bookings.length,
+    data: { data: bookings }
+  });
+});
 exports.updateBooking = catchAsync(async (req, res, next) => {
   const oldBooking = await Booking.findById(req.params.id);
 

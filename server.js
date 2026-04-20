@@ -6,7 +6,7 @@ process.on('uncaughtException', err => {
   console.log(err.name, err.message);
   process.exit(1);
 });
- 
+
 dotenv.config({ path: './config.env' });
 const app = require('./app');
 
@@ -19,7 +19,13 @@ mongoose
   .connect(DB, {
     useNewUrlParser: true,
     useCreateIndex: true,
-    useFindAndModify: false
+    useFindAndModify: false,
+    useUnifiedTopology: true,
+    poolSize: 10,
+    socketTimeoutMS: 45000,
+    connectTimeoutMS: 10000,
+    keepAlive: true,
+    keepAliveInitialDelay: 300000
   })
   .then(() => console.log('DB connection successful!'));
 

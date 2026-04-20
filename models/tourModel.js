@@ -177,6 +177,8 @@ tourSchema.pre(/^find/, function(next) {
 });
 
 tourSchema.pre(/^find/, function(next) {
+  if (this.getOptions().skipPopulate) return next();
+
   this.populate({
     path: 'guides',
     select: '-__v -passwordChangedAt'
