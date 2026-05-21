@@ -75,19 +75,30 @@ const tourSchema = new mongoose.Schema(
       default: Date.now,
       select: false
     },
-    startDates: [
-      {
-        date: Date,
-        participants: {
-          type: Number,
-          default: 0
-        },
-        soldOut: {
-          type: Boolean,
-          default: false
+    startDates: {
+      type: [
+        {
+          date: {
+            type: Date,
+            required: [true, 'A tour must have a start date']
+          },
+          participants: {
+            type: Number,
+            default: 0
+          },
+          soldOut: {
+            type: Boolean,
+            default: false
+          }
         }
+      ],
+      validate: {
+        validator: function(val) {
+          return val.length > 0;
+        },
+        message: 'At least one start date is required'
       }
-    ],
+    },
     secretTour: {
       type: Boolean,
       default: false
@@ -99,9 +110,15 @@ const tourSchema = new mongoose.Schema(
         default: 'Point',
         enum: ['Point']
       },
-      coordinates: [Number],
+      coordinates: {
+        type: [Number],
+        required: [true, 'Start location coordinates are required']
+      },
       address: String,
-      description: String
+      description: {
+        type: String,
+        required: [true, 'Start location description is required']
+      }
     },
     locations: [
       {

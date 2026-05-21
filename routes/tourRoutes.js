@@ -17,7 +17,7 @@ router
   .route('/top-5-cheap')
   .get(tourController.aliasTopTours, tourController.getAllTours);
 
-  router
+router
   .route('/recommended')
   .get(tourController.aliasRecommendedTours, tourController.getAllTours);
 
@@ -38,8 +38,12 @@ router
 
 router.route('/distances/:latlng/unit/:unit').get(tourController.getDistances);
 
-router
-  .get('/my-tours', authController.protect, userController.getMe, tourController.getMyTours);
+router.get(
+  '/my-tours',
+  authController.protect,
+  userController.getMe,
+  tourController.getMyTours
+);
 
 router
   .route('/')
@@ -47,6 +51,9 @@ router
   .post(
     authController.protect,
     authController.restrictTo('admin', 'lead-guide'),
+    tourController.uploadTourImages,
+    tourController.resizeTourImages,
+    tourController.parseFormDataFields,
     tourController.createTour
   );
 
@@ -58,6 +65,7 @@ router
     authController.restrictTo('admin', 'lead-guide'),
     tourController.uploadTourImages,
     tourController.resizeTourImages,
+    tourController.parseFormDataFields,
     tourController.updateTour
   )
   .delete(

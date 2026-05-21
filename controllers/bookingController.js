@@ -392,7 +392,8 @@ exports.getAllBookings = catchAsync(async (req, res, next) => {
       path: 'tour',
       select: 'name',
       options: { skipPopulate: true }
-    });
+    })
+    .sort('status');
 
   res.status(200).json({
     status: 'success',

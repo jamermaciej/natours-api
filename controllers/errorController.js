@@ -7,16 +7,21 @@ const handleCastErrorDB = err => {
 
 const handleDuplicateFieldsDB = err => {
   const value = err.errmsg.match(/(["'])(\\?.)*?\1/)[0];
-
+  const field = Object.keys(err.keyValue)[0];
   const message = `Duplicate field value: ${value}. Please use another value!`;
-  return new AppError(message, 400);
+  return new AppError(message, 400, { field });
 };
 
 const handleValidationErrorDB = err => {
-  const errors = Object.values(err.errors).map(el => el.message);
+  const errors = Object.values(err.errors).map(el => ({
+    field: el.path,
+    message: el.message
+  }));
 
-  const message = `Invalid input data. ${errors.join('. ')}`;
-  return new AppError(message, 400);
+  const message = `Invalid input data. ${errors
+    .map(e => e.message)
+    .join('. ')}`;
+  return new AppError(message, 400, { errors });
 };
 
 const handleJWTError = () =>
@@ -32,7 +37,9 @@ const sendErrorDev = (err, req, res) => {
       status: err.status,
       error: err,
       message: err.message,
-      stack: err.stack
+      stack: err.stack,
+      field: err.meta && err.meta.field,
+      errors: err.meta && err.meta.errors
     });
   }
 
@@ -51,7 +58,9 @@ const sendErrorProd = (err, req, res) => {
     if (err.isOperational) {
       return res.status(err.statusCode).json({
         status: err.status,
-        message: err.message
+        message: err.message,
+        field: err.meta && err.meta.field,
+        errors: err.meta && err.meta.errors
       });
     }
     // B) Programming or other unknown error: don't leak error details
@@ -88,19 +97,19 @@ module.exports = (err, req, res, next) => {
   err.statusCode = err.statusCode || 500;
   err.status = err.status || 'error';
 
+  // let error = { ...err };
+  let error = Object.assign(Object.create(Object.getPrototypeOf(err)), err);
+  error.message = err.message;
+
+  if (error.name === 'CastError') error = handleCastErrorDB(error);
+  if (error.code === 11000) error = handleDuplicateFieldsDB(error);
+  if (error.name === 'ValidationError') error = handleValidationErrorDB(error);
+  if (error.name === 'JsonWebTokenError') error = handleJWTError();
+  if (error.name === 'TokenExpiredError') error = handleJWTExpiredError();
+
   if (process.env.NODE_ENV === 'development') {
-    sendErrorDev(err, req, res);
+    sendErrorDev(error, req, res);
   } else if (process.env.NODE_ENV === 'production') {
-    let error = { ...err };
-    error.message = err.message;
-
-    if (error.name === 'CastError') error = handleCastErrorDB(error);
-    if (error.code === 11000) error = handleDuplicateFieldsDB(error);
-    if (error.name === 'ValidationError')
-      error = handleValidationErrorDB(error);
-    if (error.name === 'JsonWebTokenError') error = handleJWTError();
-    if (error.name === 'TokenExpiredError') error = handleJWTExpiredError();
-
     sendErrorProd(error, req, res);
   }
 };

@@ -26,9 +26,7 @@ router.delete('/deleteMe', userController.deleteMe);
 
 router.use(authController.restrictTo('admin'));
 
-router
-  .route('/exists')
-  .get(userController.checkEmail);
+router.route('/exists').get(userController.checkEmail);
 
 router
   .route('/')
